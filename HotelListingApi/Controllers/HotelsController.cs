@@ -1,14 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HotelListingApi.Data;
 using HotelListingApi.Models.Hotel;
 using AutoMapper;
 using HotelListingApi.Repository;
+using HotelListingApi.Contracts;
 
 namespace HotelListingApi.Controllers
 {
@@ -17,9 +13,9 @@ namespace HotelListingApi.Controllers
     public class HotelsController : ControllerBase
     {
         private readonly IMapper _mapper;
-        private readonly HotelRepository _hotelRepository;
+        private readonly IHotelRepository _hotelRepository;
 
-        public HotelsController(IMapper mapper, HotelRepository hotelRepository)
+        public HotelsController(IMapper mapper, IHotelRepository hotelRepository)
         {
             _mapper = mapper;
             _hotelRepository = hotelRepository;
@@ -39,7 +35,7 @@ namespace HotelListingApi.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<HotelDto>> GetHotel(int id)
         {
-            var hotel = await _context.Hotels.Include(q => q.Country).FirstOrDefaultAsync(q => q.Id == id);
+            var hotel = await _hotelRepository.GetDetails(id);
 
             if (hotel == null)
             {
@@ -62,11 +58,11 @@ namespace HotelListingApi.Controllers
 
            // _context.Entry().State = EntityState.Modified;
            var hotel = _hotelRepository.GetAsync(id);
-            _mapper.Map(updateHotelDto, hotel);
+            await _mapper.Map(updateHotelDto, hotel);
 
             try
             {
-                await _hotelRepository.UpdateAsync(hotel);
+                await _hotelRepository.UpdateAsync(hotel.Result);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -86,11 +82,10 @@ namespace HotelListingApi.Controllers
         // POST: api/Hotels
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Hotel>> PostHotel(GetHotelDto getHotelDto)
+        public async Task<ActionResult<Hotel>> PostHotel(CreateHotelDto createHotelDto)
         {
-            var hotel = _mapper.Map<Hotel>(getHotelDto);
-            _context.Hotels.Add(hotel);
-            await _context.SaveChangesAsync();
+            var hotel = _mapper.Map<Hotel>(createHotelDto);
+            await _hotelRepository.AddAsync(hotel);
 
             return CreatedAtAction("GetHotel", new { id = hotel.Id }, hotel);
         }
@@ -99,21 +94,21 @@ namespace HotelListingApi.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteHotel(int id)
         {
-            var hotel = await _context.Hotels.FindAsync(id);
+            var hotel = await _hotelRepository.GetAsync(id);
             if (hotel == null)
             {
                 return NotFound();
             }
 
-            _context.Hotels.Remove(hotel);
-            await _context.SaveChangesAsync();
+            await _hotelRepository.DeleteAsync(id);
+
 
             return NoContent();
         }
 
         private bool HotelExists(int id)
         {
-            return _context.Hotels.Any(e => e.Id == id);
+            return _hotelRepository.Exists(id).Result;
         }
     }
 }
